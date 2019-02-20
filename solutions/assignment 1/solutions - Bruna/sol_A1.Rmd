@@ -1,0 +1,308 @@
+---
+title: "Assignment 1"
+output:
+  pdf_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, 
+                      root.dir = 'data', fig.align = 'center',
+                      fig.width = 2.5, fig.height=2.5,
+                      cache = TRUE)
+```
+
+
+
+```{r}
+library(tidyverse) # essential tools
+library(ggdendro)
+```
+
+
+# Question 1
+
+For the dataset given, do these calculations by hand:
+
+  - Calculate a distance matrix using squared euclidean distance.
+  - Use hierarchical clustering with single linkage to cluster the data. 
+  Draw the dendro- gram and identify the two-cluster solution.
+  - Use hierarchical clustering with average linkage to cluster the data. 
+  Draw the den- drogram and identify the two-cluster solution.
+  - Cluster the data using kmeans with k = 2. Use starting clusters
+  of (a,b,c) and (d,e).
+
+```{r}
+set.seed(123)
+# Generating data
+x <- matrix(sample(-5:5, 10), nrow = 5)
+rownames(x) <- letters[1:5]
+colnames(x) <- c("U", "V")
+x
+
+dx <- dist(x)^2 # finding distances
+dx
+
+# building  clusters
+hs <- hclust(dx, "single")
+ha <- hclust(dx, "average")
+
+
+# ggplot version 
+ggdendrogram(as.dendrogram(hs))
+ggdendrogram(as.dendrogram(ha))
+
+c1 <- apply(x[1:3,], 2, mean)
+c2 <- apply(x[4:5,], 2, mean)
+
+
+kmeans(x, centers = rbind(c1, c2), algorithm = "Lloyd")
+
+x %>% 
+  as.data.frame() %>% 
+  ggplot(aes(U, V)) +
+  geom_point(colour = "orange", size = 2) +
+  theme_bw()
+```
+
+# Question 2 
+
+Eight online shoppers buy 8, 11, 7 , 6, 5, 6 , 7, 8 pairs of socks. The
+same eight shoppers buy 0, 0, 0, 0, 1, 1, 1, 1 computers. 
+
+# a)  If you run kmeans on this data with $k = 2$, 
+with no scaling, what result would you expect?
+
+```{r}
+my_df <- data.frame(x = c(8, 11, 7, 6, 5, 6, 7, 8), 
+                 y = c(0, 0, 0,0, 1, 1, 1, 1))
+
+my_df %>% 
+ggplot(aes(x, factor(y))) +
+  geom_point(colour = "orange", size = 2) +
+  theme_bw() +
+  geom_text(label = 1:8,hjust= -0.7, vjust = 0.3) +
+  labs(y = 'y')
+
+kmeans(my_df, 2)$cluster
+kmeans(my_df, 2, nstart = 10)$cluster
+```
+
+NOTE: use nstart to run the algorithm from 10 random starts. Better convergence.
+Point 2 is in a cluster of its own! 
+
+
+# b) If both variables are scaled to unit standard deviation, what will
+kmeans with $k = 2$ give you?
+
+```{r}
+d1 <- my_df %>% 
+  mutate_all(scale, center = FALSE)
+
+d1 %>% 
+ggplot(aes(x, y)) +
+  geom_point(colour = "orange", size = 2) +
+  theme_bw() +
+  geom_text(label = 1:8,hjust= -0.7, vjust = 0.3) +
+  labs(y = 'y')
+
+kmeans(d1, 2, nstart = 10)
+```
+Points 1-4 in 1 cluster, 5-8 in the other.
+
+# c) Suppose socks cost 2 euro and the computer is 2000 euro. What is you 
+clustered the amount spent by each customer using kmeans with
+$k = 2$, with no scaling?
+
+```{r}
+d <- my_df %>% 
+  mutate(x = 2*x, y = 2000*y)
+
+d %>% 
+ggplot(aes(x, y)) +
+  geom_point(colour = "orange", size = 2) +
+  theme_bw() +
+  geom_text(label = 1:8,hjust= -0.7, vjust = 0.3) +
+  labs(y = 'y')
+
+kmeans(d, 2, nstart = 10)
+```
+
+Points 1-4 in 1 cluster, 5-8 in the other. 
+
+# Question 3
+
+The file `eupop.txt` contains the population and percentage distribution
+by age for EU countries in 1999. The age categories are 0-14 years, 
+15-44 years, 45-64 years and 65 years and over.
+
+# a) Construct the euclidean distance matrix of the percentage variables.
+Use it to cluster the countries, using average linkage. Draw the dendrogram 
+and interpret. Are there any outlier countries?
+
+```{r}
+eupop <- read.table("data/eupop.txt") %>% 
+  select(-5)
+d <- dist(eupop)
+h <- hclust(d, "average")
+ggdendrogram(as.dendrogram(h))
+```
+
+Ireland is an outlier.
+
+# b) Examine the 3-cluster solution. Which countries belong to each of 
+the three clusters? Summarise the partitions with sumPartition 
+(in h1code.R) Interpret your findings.
+
+```{r}
+source('code/h1code.R')
+sumPartition(eupop, cutree(h,3))
+```
+
+Ireland is in Cluster 3. 
+Germany Greece, Italy, Spain are in Cluster 2. 
+Everyone else is in Cluster 1.
+Cluster 3: highest proportion of children(under 15), lowest percentage of over 65. Cluster 2: below average for under 15s and above average proportion of over 65s. Cluster 2 and 3 are furtherest apart, cluster 1 and 2 are closest. Cluster 2 is more compact than cluster 1. 
+
+# c) Use the kmeans algorithm to find another 3-cluster grouping of 
+countries. Which countries belong to each of the three clusters?
+
+```{r}
+km <- kmeans(eupop, 3, nstart = 10)
+km
+```
+
+
+Cluster agreement with 3 cluster solution of hclust, except, Portugal and 
+Austria are clustered with Greece, Italy, Germany and Spain. This cluster 
+still has lower proportion of children and above average porportion of over 65s.
+
+
+# d) Construct a stars plot which shows the data and clustering obtained 
+from kmeans. Optional: can you think of a better way of showing the clusters? 
+Can you think of a way to present the data and the clustering results of
+both methods on the same graphical display?
+
+```{r, fig.width = 3.5, fig.height=3.5}
+clusk <- km$cluster 
+o <- order(clusk)
+stars(eupop[o, ], nrow = 3, col.stars = clusk[o] + 1)
+
+eupop[o,] %>% 
+  mutate(country = rownames(.)) %>% 
+  gather(key, value, -country) %>% 
+  ggplot(aes(y = value, x = country, fill = key)) +
+  geom_bar(stat = "identity") +
+  labs(x = "percentage") +
+  coord_flip() +
+  ggpomological::scale_fill_pomological()
+
+
+library(GGally)
+eupop %>% 
+  mutate(col = clusk+1) %>% 
+  ggpairs(aes(colour = factor(col), alpha = 0.4))
+
+```
+
+\newpage
+
+# Question 4
+
+Analyzing the music data. 
+
+# a) Run the k-means algorithm over the range $k = 1,\dots, 15$
+clusters and record the total within cluster sum of squares (TWSS). 
+Let nstart = 25. Plot k versus TWSS and choose the best fitting number 
+of clusters. What do you observe? Note: remember to scale the data.
+
+```{r}
+music <- read.table("data/music.txt")
+music_feat <- music %>% 
+  select(3:7) %>% mutate_all(scale)
+
+results <- 
+  data.frame(
+    tot.withinss = 1:30 %>% 
+      purrr::map(kmeans, x = music_feat, nstart = 25) %>% 
+      purrr::map_dbl("tot.withinss"),
+    ind = 1:30)
+
+
+results %>% 
+ggplot(aes(ind, tot.withinss)) +
+  geom_line(colour = 'grey') +
+  geom_point(colour = "orange", size = 2) +
+  theme_bw() +
+  labs(y = 'TWSS', x = "Number of clusters")
+
+```
+
+TWSS declines slowly. Data does not partition into few, small, 
+well-defined compact clusters
+
+# b) Make a table of artist vs cluster solution from k = 5.
+
+```{r}
+clusk <- kmeans(music_feat, centers = 5, nstart = 25)$cluster
+
+
+music %>% 
+  mutate(clusk = clusk) %>% 
+  group_by(Artist, clusk) %>% 
+  count()
+```
+
+
+All but one Abba tracks in a single cluster. Most of Beatles an the 
+Eels tracks in a single cluster.
+
+\newpage
+# Question 5
+
+Protein data. We want to study the similarities and differences in the 
+protein composition of the diets of different countries. Using any methods 
+that you choose from this course or otherwise, write a brief summary.
+
+
+```{r}
+protein <- read.table("data/protein.txt")
+protein_feat <- protein %>%  select(2:10)
+row.names(protein_feat) <- protein$Country
+d <- dist(protein_feat)
+h <- hclust(d, "complete")
+ggdendrogram(as.dendrogram(h))
+
+hc <- cutree(h, 5)
+
+
+results <- 
+  data.frame(
+    tot.withinss = 1:20 %>% 
+      purrr::map(kmeans, x = protein_feat, nstart = 10) %>% 
+      purrr::map_dbl("tot.withinss"),
+    ind = 1:20)
+
+results %>% 
+ggplot(aes(ind, tot.withinss)) +
+  geom_line(colour = 'grey') +
+  geom_point(colour = "orange", size = 2) +
+  theme_bw() +
+  labs(y = 'TWSS', x = "Number of clusters")
+
+
+clusk <-  kmeans(protein_feat, centers = 5, nstart = 10)$cluster
+o <- order(clusk)
+
+```
+
+
+```{r, fig.width=5, fig.height=4}
+stars(protein_feat[o,], nrow = 3, col.stars = clusk[o]+1)
+
+table(clusk, hc)
+```
+
+
