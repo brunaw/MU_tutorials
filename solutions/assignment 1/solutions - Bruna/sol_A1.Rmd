@@ -72,7 +72,7 @@ x %>%
 Eight online shoppers buy 8, 11, 7 , 6, 5, 6 , 7, 8 pairs of socks. The
 same eight shoppers buy 0, 0, 0, 0, 1, 1, 1, 1 computers. 
 
-# a)  If you run kmeans on this data with $k = 2$, 
+a)  If you run kmeans on this data with $k = 2$, 
 with no scaling, what result would you expect?
 
 ```{r}
@@ -94,7 +94,7 @@ NOTE: use nstart to run the algorithm from 10 random starts. Better convergence.
 Point 2 is in a cluster of its own! 
 
 
-# b) If both variables are scaled to unit standard deviation, what will
+b) If both variables are scaled to unit standard deviation, what will
 kmeans with $k = 2$ give you?
 
 ```{r}
@@ -112,7 +112,7 @@ kmeans(d1, 2, nstart = 10)
 ```
 Points 1-4 in 1 cluster, 5-8 in the other.
 
-# c) Suppose socks cost 2 euro and the computer is 2000 euro. What is you 
+c) Suppose socks cost 2 euro and the computer is 2000 euro. What is you 
 clustered the amount spent by each customer using kmeans with
 $k = 2$, with no scaling?
 
@@ -138,7 +138,7 @@ The file `eupop.txt` contains the population and percentage distribution
 by age for EU countries in 1999. The age categories are 0-14 years, 
 15-44 years, 45-64 years and 65 years and over.
 
-# a) Construct the euclidean distance matrix of the percentage variables.
+a) Construct the euclidean distance matrix of the percentage variables.
 Use it to cluster the countries, using average linkage. Draw the dendrogram 
 and interpret. Are there any outlier countries?
 
@@ -152,7 +152,7 @@ ggdendrogram(as.dendrogram(h))
 
 Ireland is an outlier.
 
-# b) Examine the 3-cluster solution. Which countries belong to each of 
+b) Examine the 3-cluster solution. Which countries belong to each of 
 the three clusters? Summarise the partitions with sumPartition 
 (in h1code.R) Interpret your findings.
 
@@ -166,7 +166,7 @@ Germany Greece, Italy, Spain are in Cluster 2.
 Everyone else is in Cluster 1.
 Cluster 3: highest proportion of children(under 15), lowest percentage of over 65. Cluster 2: below average for under 15s and above average proportion of over 65s. Cluster 2 and 3 are furtherest apart, cluster 1 and 2 are closest. Cluster 2 is more compact than cluster 1. 
 
-# c) Use the kmeans algorithm to find another 3-cluster grouping of 
+c) Use the kmeans algorithm to find another 3-cluster grouping of 
 countries. Which countries belong to each of the three clusters?
 
 ```{r}
@@ -180,7 +180,7 @@ Austria are clustered with Greece, Italy, Germany and Spain. This cluster
 still has lower proportion of children and above average porportion of over 65s.
 
 
-# d) Construct a stars plot which shows the data and clustering obtained 
+d) Construct a stars plot which shows the data and clustering obtained 
 from kmeans. Optional: can you think of a better way of showing the clusters? 
 Can you think of a way to present the data and the clustering results of
 both methods on the same graphical display?
@@ -213,7 +213,7 @@ eupop %>%
 
 Analyzing the music data. 
 
-# a) Run the k-means algorithm over the range $k = 1,\dots, 15$
+a) Run the k-means algorithm over the range $k = 1,\dots, 15$
 clusters and record the total within cluster sum of squares (TWSS). 
 Let nstart = 25. Plot k versus TWSS and choose the best fitting number 
 of clusters. What do you observe? Note: remember to scale the data.
@@ -243,7 +243,7 @@ ggplot(aes(ind, tot.withinss)) +
 TWSS declines slowly. Data does not partition into few, small, 
 well-defined compact clusters
 
-# b) Make a table of artist vs cluster solution from k = 5.
+b) Make a table of artist vs cluster solution from k = 5.
 
 ```{r}
 clusk <- kmeans(music_feat, centers = 5, nstart = 25)$cluster
