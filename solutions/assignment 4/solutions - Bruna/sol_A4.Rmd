@@ -1,0 +1,554 @@
+---
+title: "Assigment 4"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, 
+                      root.dir = 'data', fig.align = 'center',
+                      fig.width = 3.5, fig.height = 3.5,
+                      cache = TRUE)
+```
+
+
+1. For the Boston data available in package MASS we wish to relate `dis` 
+(weighted mean of distances to five Boston employment centres) to 
+`nox` (nitrogen oxides concentration in parts per 10 million).
+
+(a) Fit a cubic polynomial to the data. Plot the data and the fit. 
+Comment on the fit. Calculate the MSE.
+
+```{r}
+library(tidyverse)
+library(MASS)
+
+f1 <- lm(dis ~ poly(nox,3), data = Boston)
+
+ggplot(data=Boston, aes(x=nox, y=dis)) + 
+  geom_point() + 
+  geom_line(aes(y = fitted(f1)), color ="red") +
+  theme_bw()
+
+mean(residuals(f1)^2)
+```
+
+
+> A reasonable fit. Residual plots show increasing variance. Very mild curvature.
+
+
+(b) Repeat (a), this time using a 10th degree polynomial. Compare the fits 
+and the MSE. Use anova to compare the two fits and comment on your findings.
+
+```{r}
+f2 <- lm(dis ~ poly(nox, 10), data = Boston)
+
+ggplot(data=Boston, aes(x=nox, y=dis)) + 
+  geom_point() + 
+  geom_line(aes(y = fitted(f2)), color = "blue") +
+  theme_bw()
+
+mean(residuals(f2)^2)
+```
+
+> Some of the terms in f2 are significant (not all = 0). From the graph it overfits the data, but picks up the increase in dis with increasing nox past 0.65.
+
+(c) Describe how you might use cross-validation to select the optimal degree 
+(say between 1 and 10).
+
+Split the data into  5 groups of approximately equal size.
+for each degree (j)  between 1 and 10,
+   - for each hold out sample, fit the model on the rest and calculate the
+   average test error on the hold out sample, this gives mse1... mse5.
+the cv error for degree j is the (weighted) average of the mse1.... mse5.
+Pick the degree with the smallest cv error.
+
+(d) Carry out the cross-validation procedure. What is the optimal degree?
+
+```{r}
+library(tidymodels)
+set.seed(2019)
+
+set.seed(2018)
+cv_splits <- vfold_cv(
+  data = Boston, 
+  v = 5 
+)
+
+
+spec_lm <- linear_reg() %>% set_engine("lm")
+
+geo_form <- dis ~ poly(nox, 3)
+
+fit_model <- function(split, spec) {
+  fit(
+    object = spec, 
+    formula = geo_form,
+    data = analysis(split) 
+  )
+}  
+
+compute_pred <- function(split, model) {
+  # Extract the assessment set
+  assess <- assessment(split) 
+  # Compute predictions (a df is returned)
+  pred <- predict(model, new_data = assess)
+  bind_cols(assess, pred)
+}
+
+compute_perf <- function(pred_df) {
+  numeric_metrics <- metric_set(rmse, rsq)
+  
+  numeric_metrics(
+    pred_df, 
+    truth = dis, 
+    estimate = .pred
+  )
+}
+
+
+mse_cv <- function(degree){
+  
+  geo_form <- dis ~ poly(nox, degree)
+  
+  fit_model <- function(split, spec) {
+    fit(
+      object = spec, 
+      formula = geo_form,
+      data = analysis(split) 
+    )
+  }  
+  
+  
+  cv_splits <- cv_splits %>% 
+    mutate(models_lm = map(splits, fit_model, spec_lm),
+           pred_lm = map2(splits, models_lm, compute_pred),
+           perf = map(pred_lm, compute_perf))
+  
+  cv_splits %>% 
+    unnest(perf) %>% 
+    filter(.metric == 'rmse') %>% 
+    summarise(m = mean(.estimate)) %>% 
+    pull(m)
+  
+}
+
+mses <- data.frame(rmse = 1:10 %>% map_dbl(mse_cv),
+                   deg = 1:10)
+
+mses %>% 
+  ggplot(aes(y = rmse, factor(deg), group = 1)) +
+  geom_line() +
+  geom_point(colour = "tomato", size = 2) +
+  theme_bw()
+
+which.min(mses$rmse)
+
+```
+
+
+(e) Use bs() to fit a regression spline with 4 degrees of freedom. What are 
+the knots used? Plot the data and the fit. Comment on the fit. Calculate the MSE.
+
+```{r}
+library(splines)
+f3 <- lm(dis ~ bs(nox, df = 4), data = Boston)
+attr(bs(Boston$nox, df = 4), "knots")
+
+Boston %>% 
+ggplot(aes(x = nox, y = dis)) +
+  geom_point() + 
+  geom_line(aes(y = fitted(f3)), color = "red") +
+  theme_bw()
+
+sqrt(mean(residuals(f3)^2))
+```
+
+(f) Fit a curve using a smoothing spline with the automatically chosen 
+amount of smoothing. Display the fit. Does the automatic $\lambda$
+give a good result?
+
+```{r}
+f4 <- smooth.spline(Boston$nox, Boston$dis, cv = TRUE)
+f4
+
+Boston %>% 
+ggplot(aes(x = nox, y = dis)) + 
+  geom_point() + 
+  geom_line(aes(y = fitted(f4)), color = "red") +
+  theme_bw()
+
+sqrt(mean(residuals(f4)^2))
+```
+
+
+(g) Now use smoothing spline with a larger value of spar. Overlay both 
+smoothing spline fits on the plot. Which looks better?
+
+```{r}
+f5 <- smooth.spline(Boston$nox,Boston$dis, spar = 2)
+f5
+
+Boston %>% 
+  ggplot(aes(x = nox, y = dis))+ geom_point() + 
+  geom_line(aes(y = fitted(f4)), color = "red")+ 
+  geom_line(aes(y = fitted(f5)), color = "blue") +
+  theme_bw()
+```
+
+
+2. Using the Boston data, with `dis` as the response and predictors 
+`medv`, `age` and `nox`.
+
+(a) Split the data into training 60% and test 40%. Using the training data, 
+fit a generalised additive model (GAM). Use ns with 4 degrees of freedom 
+for each predictor.
+
+```{r}
+library(splines)
+
+Boston <-  Boston %>% 
+  mutate(part = ifelse(runif(nrow(.)) > 0.6, "test", "train"))
+
+Boston %>% 
+  janitor::tabyl(part)
+
+train <- Boston %>% filter(part == "train") %>% dplyr::select(-part)
+test <- Boston %>% filter(part == "test") %>% dplyr::select(-part)
+
+gfit1 <-  lm(dis ~ ns(medv, 4)+ ns(age, 4) + ns(nox, 4), data = train)
+
+pairs(Boston[, c(8, 7, 5, 14)])
+```
+
+(b) Use plot.gam to display the results. Does it appear if a linear term 
+is appropriate for any of the predictors?
+
+```{r}
+par(mfrow = c(1, 3))
+gam::plot.Gam(gfit1)
+```
+
+> The linear model does not seem appropriate.
+
+(c) Simplify the model fit in part (a). Refit the model. Use anova to compare 
+the two fits and comment on your results.
+
+```{r}
+attr(ns(train$age, 4), "knots")
+attr(ns(train$age, 2), "knots")
+
+gfit2 <-  lm(dis ~ ns(medv, 2) + ns(age, 2) + ns(nox, 2), data = train)
+
+par(mfrow=c(1,3))
+gam::plot.Gam(gfit2)
+
+anova(gfit1, gfit2)
+
+```
+
+> the model with fewer df is not appropriate.
+
+4. 
+
+(a) For the training data in question 2, fit a tree model. Use dis as response, 
+and predictors `medv`, `age` and `nox`. Draw the tree. 
+Calculate the training and test MSE.
+
+```{r}
+library(tree)
+tree <- tree(dis ~ medv + age + nox, data = train)
+summary(tree)
+```
+
+> The fitted tree has 5 leaf nodes.
+
+```{r}
+plot(tree)
+text(tree, cex = 0.5, pretty = 0)
+sqrt(mean(residuals(tree)^2))
+pred <- predict(tree, test)
+sqrt(mean((test$dis - pred)^2))
+```
+
+(b) Use `cv.tree` to select a pruned tree. If pruning is required, fit and 
+draw the pruned tree. Calculate the training and test MSE. Compare the results to
+those in (a).
+
+```{r}
+cvtree <- cv.tree(tree)
+cvtree
+
+ggplot() +
+  geom_point(aes(x = length(c(cvtree$dev)):1, y = c(cvtree$dev))) +
+  geom_line(aes(x = length(c(cvtree$dev)):1, y = c(cvtree$dev))) +
+  theme_bw()
+```
+
+(c) Which fit is better, the (optionally pruned) tree or the GAM? Compare 
+their performance on the test data.
+
+```{r}
+pred <- predict(tree, test)
+sqrt(mean((test$dis - pred)^2))
+
+pred <- predict(gfit2, test)
+sqrt(mean((test$dis - pred)^2))
+```
+
+> The GAM has a slightly lower test MSE, but this is seed dependant. 
+
+5.  For the data generated in question 6, Assignment 3:
+
+```{r}
+set.seed(1)
+x <- rnorm(100)
+y <- 1 + .2*x+3*x^2+.6*x^3 + rnorm(100)
+d <- data.frame(x = x, y = y)
+
+```
+
+(a) Fit a regression model containing predictors 
+$X, X^2, \dots X^10$. Based on the output in `summary()`
+which terms are needed in the model?
+
+```{r}
+lm(y ~ poly(x, 10, raw = TRUE), data = d) %>% summary()
+```
+
+
+(b) Fit a ridge regression model using the glmnet function over a grid 
+of values for $\lambda$ ranging from 0.001 to 50. Plot coefficients vs penalty 
+using the default plot method. Use the inbuilt function `cv.glmnet`
+to choose the tuning parameter $\lambda$ . How do the coefficients at the optimal 
+value of $\lambda$ compare to the linear regression ones in (a)?
+
+```{r}
+library(glmnet)
+X <- model.matrix(y ~ poly(x, 10, raw = TRUE), data = d)
+grid <- seq(0.001, 50, length = 100) 
+ridge.fit <- glmnet(X, y, alpha=0, lambda = grid)
+plot(ridge.fit)
+cv.out <- cv.glmnet(X,y,alpha=0)
+cv.out$lambda.min
+
+plot(cv.out)
+ridge.fit <- glmnet(X, y, alpha = 0, 
+                    lambda = cv.out$lambda.min)  
+
+coef(ridge.fit) 
+```
+
+
+(c) Repeat (b) for lasso regression instead of ridge.
+
+```{r}
+lasso.fit <- glmnet(X, y, alpha=1, lambda = grid) 
+plot(lasso.fit)
+cv.out <- cv.glmnet(X, y, alpha=1)
+cv.out$lambda.min
+
+lasso.fit <- glmnet(X,y,alpha=1, lambda = cv.out$lambda.min)  
+
+coef(lasso.fit) 
+```
+
+
+(d) Plot the data y vs x and superimpose the fitted models from linear 
+regression, ridge and lasso with optimal values of lambda as chosen by 
+cross-validation.
+
+```{r}
+Xord <- X[order(X[,2]),]
+
+pred1 <- predict(lm(y~poly(x, 10, raw = TRUE), data = d), 
+                newdata = data.frame(x = sort(x)))
+
+pred2 <- predict(ridge.fit, newx = Xord)
+
+pred3 <- predict(lasso.fit, newx = Xord)
+
+ggplot() +
+  geom_point(aes(x, y), alpha = 0.8) +
+  geom_line(aes(sort(x), pred1), color = "red") +
+  geom_line(aes(sort(x), pred2), color = "blue") +
+  geom_line(aes(sort(x), pred3), color = "green2") +
+  theme_bw()
+
+```
+
+
+6. Titanic data from Assignment 3:
+
+```{r}
+ttrain <- read.csv("data/ttrain.csv", header = TRUE, row.names = 1)
+ttest <- read.csv("data/ttest.csv", header = TRUE, row.names = 1)
+```
+
+
+(a) For the training data, fit a tree model using all three predictors. Draw the tree. Interpret the model. For the training and test data what proportion of survivors are missclassified? What proportion of those who died are missclassified? What proportion of the predicted survivors actually survived? What is the overall error rate for the training data?
+
+
+```{r}
+library(tree)
+tree <- tree(Survived ~ ., data = ttrain)
+summary(tree)
+plot(tree)
+text(tree, cex = 0.5, pretty = 0)
+```
+
+> Fitted model: males have no chance of survival. For females, those in 3rd 
+class have no chance of survival. The rest are predicted as survived. 
+Age is not in the model.
+
+```{r}
+prob <- predict(tree, ttrain)[,2]
+ttrain$pred <- factor(ifelse(prob < .5, "No", "Yes"))
+
+ttrain %>% 
+  group_by(Survived, pred) %>% 
+  count() %>% 
+  group_by(Survived) %>% 
+  mutate(perc = scales::percent(n/sum(n)))
+```
+
+
+```{r}
+prob <- predict(tree, ttest)[,2]
+ttest$pred <- factor(ifelse(prob < .5, "No", "Yes"))
+
+ttest %>% 
+  group_by(Survived, pred) %>% 
+  count() %>% 
+  group_by(Survived) %>% 
+  mutate(perc = scales::percent(n/sum(n)))
+```
+
+(b) Use `cv.tree` to select a pruned tree. If pruning is required, fit and draw the
+pruned tree.
+
+```{r}
+cvtree <- cv.tree(tree)
+
+ggplot() +
+  geom_point(aes(x = 3:1, y = c(cvtree$dev))) +
+  geom_line(aes(x = 3:1, y = c(cvtree$dev))) +
+  theme_bw()
+```
+
+
+(c) Fit a tree model using only Age and Class as predictors. Draw the tree. 
+Interpret the model. Compare the test set results to (a).
+
+```{r}
+tree <- tree(Survived ~ Age + Class, data = ttrain)
+summary(tree)
+plot(tree)
+text(tree, cex = 0.5, pretty = 0)
+prob <- predict(tree, ttrain)[,2]
+ttrain$pred <- factor(ifelse(prob < .5, "No", "Yes"))
+
+ttrain %>% 
+  dplyr::select(1:3, pred) %>% 
+  group_by_all() %>% 
+  count() %>% 
+  arrange(pred, n)
+```
+
+> Fitted model: 3rd class and crew have no chance of survival. For those in 1st 
+and 2nd class children are predicted to have survived. Adults in 1st class are predicted to have survived, but those in the 2nd did not.
+
+```{r}
+prob <- predict(tree, ttest)[,2]
+ttest$pred <- factor(ifelse(prob < .5, "No", "Yes"))
+
+ttest %>% 
+  group_by(Survived, pred) %>% 
+  count() %>% 
+  group_by(Survived) %>% 
+  mutate(perc = scales::percent(n/sum(n)))
+
+```
+
+(d) Fit a random forest model (using `randomForest`) using all three predictors and 
+compare the test set results to (a) and (c). Which variables are important?
+
+```{r}
+library(randomForest)
+bag <- randomForest(Survived ~ ., data = ttrain)
+varImpPlot(bag)
+
+ttest$pred <- predict(bag, newdata = ttest)
+
+ttest %>% 
+  group_by(Survived, pred) %>% 
+  count() %>% 
+  group_by(Survived) %>% 
+  mutate(perc = scales::percent(n/sum(n)))
+
+```
+
+7. Heart data: binary outcome AHD for 303 patients who presented with chest pain.
+An outcome value of Yes indicates the presence of heart disease, while 
+No means no heart disease.
+
+There are 13 predictors including Age, Sex, Chol (a cholesterol measurement),
+and other heart and lung function measurements.
+
+Fit a support vector machine with a radial kernel to this data. Use 
+cross validation to tune the $\lambda$ and cost parameters (see function 
+`tune()` in e1071 library). How does your result (test error) compare to 
+the test error in the notes (obtained using trees and random forrests)?
+
+```{r}
+set.seed(2019)
+heart <- read.csv("data/heart.csv", row.names=1) %>% na.omit()
+
+heart <-  heart %>% 
+  mutate(part = ifelse(runif(nrow(.)) > 0.66, "test", "train"))
+
+heart %>% 
+  janitor::tabyl(part)
+
+train <- heart %>% filter(part == "train") %>% dplyr::select(-part)
+test <- heart %>% filter(part == "test") %>% dplyr::select(-part)
+
+
+library(e1071)
+
+fit.svm <- svm(AHD ~ ., data = train, kernel = "radial")
+summary(fit.svm)
+
+test$pred <- predict(fit.svm, newdata = test)
+
+test %>% 
+  group_by(AHD, pred) %>% 
+  count()
+```
+
+
+```{r}
+tune.out <- tune(svm,AHD~., data = train, kernel = "radial", 
+                 ranges = list(cost = 10^seq(-1, 6, by = 1), 
+                               gamma = 10^seq(-6, 1, by = 1)))
+tune.out
+fit.svm <- svm(AHD~., data = train, kernel = "radial", 
+               cost = 10000, gamma = 0.00001)
+summary(fit.svm)
+
+test$pred <- predict(fit.svm, newdata = test)
+
+
+test %>% 
+  group_by(AHD, pred) %>% 
+  count()
+
+bag <- randomForest(AHD ~ ., data = train)
+test$pred <- predict(bag, test)
+
+test %>% 
+  group_by(AHD, pred) %>% 
+  count()
+```
+

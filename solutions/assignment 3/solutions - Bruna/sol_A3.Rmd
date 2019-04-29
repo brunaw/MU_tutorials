@@ -1,0 +1,443 @@
+---
+title: "Assignment 3"
+output:
+  pdf_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, 
+                      root.dir = 'data', fig.align = 'center',
+                      fig.width = 3.5, fig.height = 3.5,
+                      cache = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+```
+
+
+1.The Titanic dataset records for each person on the ship the passenger
+class, age (child or adult), and sex, and whether they survived or not.
+In this assignment you will use logistic regression on a training set 
+(ttrain) to develop a classification rule, and then this rule will be 
+applied to the test set (ttest).
+
+
+```{r}
+ttrain <- read.csv("data/ttrain.csv", header = TRUE, row.names = 1)
+ttest <- read.csv("data/ttest.csv", header = TRUE, row.names = 1)
+head(ttrain)
+```
+
+
+(a) Use logistic regression to build a model relating Survived to Class,
+Age and Sex for the training data ttrain.
+
+```{r}
+model <- glm(Survived ~ Class + Age + Sex, data = ttrain, 
+             family = "binomial")
+summary(model)
+```
+
+(b) From the fitted model, calculate a vector prob of survival 
+probabilities and a vector pred of predicted classes, for the training 
+data. What proportion of survivors are missclassified? What proportion 
+of those who died are missclassified? What proportion of the predicted 
+survivors actually survived? What is the overall error rate for
+the training data?
+
+```{r}
+pred_prob <- predict(model, type = "response")
+ttrain$pred_class <- ifelse(pred_prob < 0.5, "No", "Yes")
+
+# table(ttrain$Survived, pred_class)
+
+ttrain %>% 
+  group_by(pred_class, Survived) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = scales::percent(n/sum(n)))
+
+# Error = 5.5 + 16.1 = 21.6%
+
+```
+
+
+(c) From the fitted model, calculate a vector prob of survival 
+probabilities and a vector pred of predicted classes, for the test data. 
+What proportion of survivors are missclassified? What proportion of those 
+who died are missclassified? What proportion of the predicted survivors
+actually survived? What is the overall error rate for the test data?
+
+```{r}
+# Probabilities
+pred_prob_test <- predict(model, type = "response", newdata = ttest)
+ttest$pred_class <- ifelse(pred_prob_test < 0.5, "No", "Yes")
+
+table(ttest$pred_class, ttest$Survived)
+
+ttest %>% 
+  group_by(pred_class, Survived) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = scales::percent(n/sum(n)))
+
+# Error = 6.8 + 17.7 = 24.5%
+```
+
+
+2. Suppose we wish to predict whether a given stock will issue a dividend 
+this year (yes or no) based on X, last year’s percentage profit. 
+We examine a large number of companies and discover that the mean 
+value of X for companies that issued a dividend was 10, while the mean
+for those that didn’t was 0. In addition, the variance of X for these 
+two sets of companies was 36. Finally, 80% of companies issued dividends. 
+Assuming that X follows a normal distribution, predict the probability 
+that a company will issue a dividend this year given that its percentage 
+profit was X = 4 last year.
+
+
+```{r}
+# Probability of issuing dividend 
+p_div <- 0.8*exp(- (1/72) * (4 - 10)^2)
+# Probability of non issuing dividend 
+p_ndiv <- 0.2*exp(- (1/72) * (4 - 0)^2)
+
+# Result
+p_div/(p_div + p_ndiv)
+```
+
+3. In the Auto data, create a new variable that contains the value
+1 for cars with above the median mpg, and 0 for other cars. Name this
+variable mpg01 Split the data into a test and training sets of size 
+containing 50% and 50% of observations each.
+
+```{r}
+library(MASS)
+library(ISLR)
+library(class)
+m <- median(Auto$mpg)
+Auto$mpg01 <- factor(ifelse(Auto$mpg <= m, 0, 1))
+set.seed(1)
+s <- sample(nrow(Auto), round(.5*nrow(Auto)))
+Atrain <- Auto[s,]
+Atest <- Auto[-s,]
+```
+
+(a) Plot the variables weight and acceleration using colour to show the 
+two levels of mpg01 for the training set.
+
+```{r}
+Atrain %>% 
+  ggplot(aes(weight, acceleration)) +
+  geom_point(aes(colour = mpg01)) +
+  theme_bw()
+```
+
+
+(b) Perform a linear discriminant analysis to predict mpg01, using 
+variables weight and acceleration, on the training set. Use a plot to 
+show the discriminant boundaries. What is the test error of the model obtained?
+
+
+```{r}
+lda <- lda(mpg01 ~ weight + acceleration, data = Atrain)
+lda
+Atest$pred <- predict(lda, Atest)$class
+
+Atest %>% 
+  group_by(pred, mpg01) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = scales::percent(n/sum(n)))
+# Error = 2 + 10.7 = 12.7%
+```
+
+
+```{r}
+grid <- expand.grid(
+  weight = seq(min(Atrain$weight), max(Atrain$weight), length = 100),
+  acceleration = seq(min(Atrain$acceleration), max(Atrain$acceleration), 
+                     length = 100)
+)
+
+grid$pred <- predict(lda, grid)$class
+ggplot(aes(x = weight, y = acceleration, color = pred), 
+       data = grid) + 
+  geom_point(size=.3) +
+  theme_bw()
+```
+
+
+(c) Repeat (b) using quadratic discriminant analysis. Which is better, LDA or QDA?
+
+```{r}
+qda <- qda(mpg01 ~ weight + acceleration, data = Atrain)
+qda
+Atest$pred <- predict(qda, Atest)$class
+
+Atest %>% 
+  group_by(pred, mpg01) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = scales::percent(n/sum(n)))
+# Error = 1 + 12.2 = 12.2%
+```
+
+```{r}
+grid$pred <- predict(qda, grid)$class
+ggplot(aes(x = weight, y = acceleration, color = pred), 
+       data = grid) + 
+  geom_point(size=.3) +
+  theme_bw()
+
+```
+
+(d) Perform a linear discriminant analysis to predict mpg01, using 
+variables displacement, horsepower, weight and acceleration on the training 
+set. What is the test error of the model obtained?
+
+```{r}
+lda <- lda(mpg01 ~ displacement + horsepower + 
+           weight + acceleration, data = Atrain)
+lda
+Atest$pred <- predict(lda, Atest)$class
+
+Atest %>% 
+  group_by(pred, mpg01) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = scales::percent(n/sum(n)))
+# Error = 10.2%
+```
+
+
+(e) Repeat (d) using quadratic discriminant analysis. Which is better, LDA or QDA?
+
+```{r}
+qda <- qda(mpg01 ~ displacement + horsepower + 
+           weight + acceleration, data = Atrain)
+qda
+Atest$pred <- predict(qda, Atest)$class
+
+Atest %>% 
+  group_by(pred, mpg01) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = scales::percent(n/sum(n)))
+# Error = 3.1 + 9.2 = 12.3 %
+```
+
+
+(f) Perform KNN with response of mpg01, and the four predictors displacement,
+horsepower, weight and acceleration. Remember to scale the predictors. 
+Use k = 5 and k = 30. Which value of k gives the best result on the test set?
+
+
+
+```{r}
+scaled_train <-   Atrain %>%  
+    dplyr::select(displacement, horsepower, weight, acceleration) %>% 
+    mutate_all(scale)
+
+scaled_test <-   Atest %>%  
+    dplyr::select(displacement, horsepower, weight, acceleration) %>% 
+    mutate_all(scale)
+
+knn_5 <- knn(
+  scaled_train,
+  scaled_test, 
+  cl = Atrain$mpg01,
+  k = 5)
+
+knn_30 <- knn(
+  scaled_train,
+  scaled_test, 
+  cl = Atrain$mpg01,
+  k = 30)
+
+table(Atest$mpg01, knn_5)
+table(Atest$mpg01, knn_30)
+```
+
+
+4. A classifier gives the following result. In the table below, 
+Group gives the true class, and Prob gives the estimated probability of 
+Group A (positive) using the classifier.
+
+```{r}
+groups <- data.frame(
+  group = c(rep("A", each = 6), rep("B", each = 4)),
+  p = c(0.206, 0.177, 0.687, 0.384, 0.770, 0.498, 0.718, 
+        0.992, 0.380, 0.777)
+)
+groups %>% knitr::kable()
+```
+
+
+(a) What are the predicted classes? Use a threshold of 0.5.
+
+
+```{r}
+groups <- groups %>% 
+  mutate(pred = ifelse(p > 0.5, "A", "B"))
+```
+
+(b) What is the error rate? What is the false positive rate? The true positive rate?
+
+```{r}
+groups %>% 
+  group_by(pred, group) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = scales::percent(n/sum(n)))
+
+# Error = 30 + 40 = 70%
+```
+
+
+(c) Now let the threshold take values 0, .2, .4,.6,.8,1. For each threshold calculate the false positive rate, and the true positive rate. 
+(If doing this in R use more thresholds.)
+
+
+```{r}
+
+trs <- seq(0, 1, by = 0.05)
+fc <- function(trs){
+  res <- groups %>% 
+    mutate(pred = ifelse(p > trs, "A", "B")) 
+  tab <- c(prop.table(table(res$pred, res$group)))
+  
+  while(length(tab) < 4){
+    tab <- c(tab, 0)  
+  }
+  tab <- matrix(tab, ncol = 2, nrow = 2, byrow = TRUE)
+  tp <- tab[1,1]
+  fp <-  tab[2, 1]
+  return(list(tp = tp, fp = fp))
+  
+}
+
+res <-  trs %>% purrr::map(fc) 
+df <- data.frame(fp = res %>% map_dbl("fp"),
+                 tp = res %>% map_dbl("tp"))
+
+
+```
+
+
+(d) Plot the true positive rate versus the false positive rate. 
+This is the ROC curve.
+
+```{r}
+df %>% 
+  ggplot(aes(tp, fp)) +
+  geom_line() +
+  labs(y = "False Positive", x = "True Positive")
+```
+
+(e) (Optional, if doing in R) Another classifier just assigns class 
+probabilities randomly, ie the estimated probabilities are:
+Plot the ROC curve for this classifier.
+
+
+5. Dataset on diabetes in Pima Indian Women in library(MASS). For a
+description of the data see ?Pima.tr.
+
+Use any supervised classification technique to predict diabetes from 
+the 7 available features. Train your algorithms on Pima.tr and present 
+the overall error rate for the test data Pima.te.
+
+6. Generate some fake data using the following code:
+
+
+```{r}
+set.seed(1)
+x <- rnorm(100)
+y <- 1 + .2*x+3*x^2+.6*x^3 + rnorm(100)
+d <- data.frame(x = x, y = y)
+
+d <- purrr::map(2:10, 
+                ~{ d$x^.x }    
+) %>% bind_cols() %>% 
+  bind_cols(d)
+
+# or
+
+# for(i in 2:10){
+#   d[ , paste("var", i)] <- d$x^i
+# 
+# }
+
+```
+
+Use best subset selection to choose the best model containing predictors
+$X, X^2, \dots, X^{10}$. Which terms are included in the best 3 variable 
+model?
+```{r}
+library(leaps)
+allfits <- regsubsets(y ~ ., data = d)
+summary(allfits)$which
+
+```
+
+
+(b) Make a plot of $C^p$ versus number of predictors for the models in 
+all fits. Which model has the lowest $C^p$? What are its predictors?
+
+```{r}
+par(mar = c(3,3,0,0))
+plot(allfits, scale = "r2", col = "blue", main = "Best")
+npred <-1:8
+
+data.frame(npred = 1:8, 
+           cp = summary(allfits)$cp) %>% 
+  ggplot(aes(npred, cp)) +
+  geom_line(colour = "blue") +
+  geom_point() + 
+  theme_bw()
+
+```
+
+
+
+(c) Reconstruct all fits with option method = ”forward”. Which 
+model has the lowest $C^p$? What are its predictors?
+
+```{r}
+forw <- regsubsets(y ~ ., data = d, method="forward")
+summary(forw)$which
+plot(forw, scale = "r2", col = "blue", main = "Best")
+
+data.frame(npred = 1:8, 
+           cp = summary(forw)$cp) %>% 
+  ggplot(aes(npred, cp)) +
+  geom_line(colour = "blue") +
+  geom_point() + 
+  theme_bw()
+
+```
+
+
+(d) Reconstruct allfits with option method = ”backward”. Which model 
+has the lowest $C^p$? What are its predictors?
+
+```{r}
+back <- regsubsets(y ~ ., data = d, method="backward")
+summary(back)$which
+plot(back, scale = "r2", col = "blue", main = "Best")
+
+npred <-1:8
+
+data.frame(npred = 1:8, 
+           cp = summary(back)$cp) %>% 
+  ggplot(aes(npred, cp)) +
+  geom_line(colour = "blue") +
+  geom_point() + 
+  theme_bw()
+
+```

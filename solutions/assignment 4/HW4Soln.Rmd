@@ -1,0 +1,539 @@
+---
+title: "Assignment 4"
+output: pdf_document
+author: Name Student no.
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<!-- Mark Qu 1 -->
+
+Mark Qu 5.
+<!-- # Q1  -->
+<!-- Swiss data -->
+<!-- ```{r fig.width=5,fig.height=5} -->
+<!-- library(MASS) -->
+<!-- ?swiss -->
+<!-- pairs(swiss) -->
+<!-- summary(lm(Fertility ~ . , data = swiss)) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(glmnet) # for the ridge regression -->
+<!-- x <- model.matrix(Fertility ~ ., data=swiss) -->
+<!-- y <- swiss$Fertility -->
+<!-- grid <- 10^seq(-5, -5, length = 100) -->
+<!-- ridge.fit <- glmnet(x,y,alpha=0, lambda = grid) # for ridge -->
+
+<!-- plot(ridge.fit) -->
+
+<!-- set.seed(1) -->
+<!-- cv.out <- cv.glmnet(x,y,alpha=0) -->
+<!-- cv.out$lambda.min -->
+
+
+<!-- ridge.fit <- glmnet(x,y,alpha=0, lambda = cv.out$lambda.min)  -->
+
+<!-- coef(ridge.fit) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- lasso.fit <- glmnet(x,y,alpha=1, lambda = grid) # for ridge -->
+
+<!-- plot(lasso.fit) -->
+<!-- cv.out <- cv.glmnet(x,y,alpha=1) -->
+<!-- cv.out$lambda.min -->
+
+<!-- lasso.fit <- glmnet(x,y,alpha=1, -->
+<!--                     lambda = cv.out$lambda.min) -->
+<!-- coef(lasso.fit) -->
+<!-- ``` -->
+
+
+# Q1
+
+# a) 
+```{r fig.width=3,fig.height=3}
+library(ggplot2)
+library(MASS)
+f1 <- lm(dis ~ poly(nox,3), data=Boston )
+ggplot(data=Boston, aes(x=nox, y=dis))+ geom_point() + 
+  geom_line(aes(y=fitted(f1)), color="red")
+mean(residuals(f1)^2)
+plot(f1,1)
+```
+
+A reasonable fit. Residual plots show increasing variance. Very mild curvature.
+
+# b)
+```{r fig.width=3,fig.height=3}
+f2 <- lm(dis ~ poly(nox,10), data=Boston )
+ggplot(data=Boston, aes(x=nox, y=dis))+ geom_point() + 
+  geom_line(aes(y=fitted(f1)), color="red")+ 
+  geom_line(aes(y=fitted(f2)), color="blue")
+mean(residuals(f2)^2)
+anova(f1,f2)
+plot(f2, 1)
+```
+
+
+Some of the terms in f2 are significant (not all = 0). From the graph it overfits the data, but picks up the increase in dis with increasing nox past 0.65.
+
+# c) 
+Split the data into  5 groups of approximately equal size.
+for each degree (j)  between 1 and 10,
+   for each hold out sample, fit the model on the rest and calculate the
+   average test error on the hold out sample, this gives mse1... mse5.
+the cv error for degree j is the (weighted) average of the mse1.... mse5.
+Pick the degree with the smallest cv error.
+
+# d)
+
+```{r fig.width=3,fig.height=3}
+set.seed(123)
+
+
+k <- 5
+fold <- sample(k, nrow(Boston), replace=T)
+fsize <- table(fold)
+
+mse <- vector(length=k)
+degree <- 1:10
+cv <- vector(length=length(degree))
+
+for (j in 1:length(degree)){
+  for (i in 1:k){
+    foldi <- Boston[fold==i,]
+    foldOther <- Boston[fold!=i,]
+    f <- lm(dis ~ poly(nox,degree[j]), data=foldOther )
+    pred <- predict(f, foldi)
+    mse[i] <-mean((pred - foldi$dis)^2) # MSEi
+  }
+  cv[j]<- weighted.mean(mse, fsize)
+}
+plot(degree, cv)
+lines(degree,cv)
+degree[which.min(cv)] # produces the lowest CV
+```
+
+
+# e)
+
+```{r fig.width=3,fig.height=3}
+library(splines)
+f3 <- lm(dis ~ bs(nox, df=4), data=Boston)
+attr(bs(Boston$nox, df=4), "knots")
+ggplot(data=Boston, aes(x=nox, y=dis))+ geom_point() + 
+  geom_line(aes(y=fitted(f3)), color="red")
+mean(residuals(f3)^2)
+plot(f3, 1)
+```
+
+# f)
+
+```{r fig.width=3,fig.height=3}
+f4 <- smooth.spline(Boston$nox,Boston$dis, cv= T)
+f4
+ggplot(data=Boston, aes(x=nox, y=dis))+ geom_point() + 
+  geom_line(aes(y=fitted(f4)), color="red")
+mean(residuals(f4)^2)
+
+```
+
+
+# g)
+
+
+```{r fig.width=3,fig.height=3}
+f5 <- smooth.spline(Boston$nox,Boston$dis, spar=2)
+f5
+ggplot(data=Boston, aes(x=nox, y=dis))+ geom_point() + 
+  geom_line(aes(y=fitted(f4)), color="red")+ 
+  geom_line(aes(y=fitted(f5)), color="blue")
+```
+This fit is too smooth.
+
+
+# Q2
+# a)
+```{r}
+
+set.seed(123)
+s <- sample(nrow(Boston), round(.6*nrow(Boston)))
+Boston1 <- Boston[s,]
+Boston2 <- Boston[-s,]
+gfit1 <-  lm(dis ~ ns(medv,4)+ ns(age,4)+ ns(nox,4), data=Boston1)
+
+pairs(Boston[, c(8, 7, 5, 14)])
+```
+
+
+# b)
+
+```{r  fig.width=8,fig.height=3}
+suppressMessages(library(gam))
+par(mfrow=c(1,3))
+plot.Gam(gfit1)
+```
+
+Linear model does not seem appropriate.
+
+# c)
+
+```{r fig.width=9,fig.height=3}
+attr(ns(Boston1$age,4), "knots")
+attr(ns(Boston1$age,2), "knots")
+gfit2 <-  lm(dis ~ ns(medv,2)+ ns(age,2)+ ns(nox,2), data=Boston1)
+
+par(mfrow=c(1,3))
+plot.Gam(gfit2)
+
+anova(gfit1, gfit2)
+```
+
+
+Reject H0, the model with fewer df is not appropriate
+
+
+# Q4
+
+```{r}
+
+library(tree)
+tree <- tree(dis ~ medv+age+nox, data=Boston1)
+summary(tree)
+
+```
+
+The fitted tree has 5 leaf nodes.
+
+```{r fig.width=7, fig.height=7}
+plot(tree)
+text(tree, cex=.5, pretty=0)
+mean(residuals(tree)^2)  # training MSE
+pred <- predict(tree, Boston2)
+mean((Boston2$dis - pred)^2) # test MSE
+```
+
+# b)
+
+```{r}
+cvtree <- cv.tree(tree)
+cvtree
+plot(cvtree$size,cvtree$dev,type="b")
+w <- which.min(cvtree$dev)
+cvtree$size[w]
+# no pruning required
+```
+
+# c)
+
+```{r}
+pred <- predict(tree, Boston2)
+mean((Boston2$dis - pred)^2) # test MSE for tree
+
+pred <- predict(gfit2, Boston2)
+mean((Boston2$dis - pred)^2) # test MSE for gam
+
+```
+
+The GAM has a slightly lower test MSE, but this is seed dependant
+
+
+
+# Q5
+
+# a) 
+```{r}
+set.seed(1)
+x <- rnorm(100)
+y <- 1 + .2*x+3*x^2+.6*x^3 + rnorm(100)
+d <- data.frame(x=x,y=y)
+summary(lm(y~poly(x, 10, raw = TRUE), data = d))
+
+```
+
+
+
+# b) 
+```{r fig.width=3,fig.height=3}
+library(glmnet)
+X <- model.matrix(y~poly(x, 10, raw = TRUE), data = d)
+grid <- seq(0.001, 50, length = 100) 
+ridge.fit <- glmnet(X,y,alpha=0, lambda = grid) # for ridge
+plot(ridge.fit)
+cv.out <- cv.glmnet(X,y,alpha=0)
+cv.out$lambda.min
+
+
+plot(cv.out)
+ridge.fit <- glmnet(X,y,alpha=0, lambda = cv.out$lambda.min)  
+
+coef(ridge.fit) 
+```
+
+
+# c)
+```{r fig.width=3,fig.height=3}
+lasso.fit <- glmnet(X,y,alpha=1, lambda = grid) 
+plot(lasso.fit)
+cv.out <- cv.glmnet(X,y,alpha=1)
+cv.out$lambda.min
+
+lasso.fit <- glmnet(X,y,alpha=1, lambda = cv.out$lambda.min)  
+
+coef(lasso.fit) 
+
+# lasso.fit <- glmnet(X,y,alpha=1, lambda = 2)  
+# 
+# coef(lasso.fit) 
+```
+
+# d)
+```{r fig.width=4,fig.height=4}
+plot(x,y)
+pred1<- predict(lm(y~poly(x, 10, raw = TRUE), data = d), newdata = data.frame(x=sort(x)))
+lines(sort(x),pred1)
+
+Xord <- X[order(X[,2]),]
+
+pred2<- predict(ridge.fit, newx = Xord)
+lines(sort(x),pred2, col = 2)
+
+
+
+pred3<- predict(lasso.fit, newx = Xord)
+lines(sort(x),pred3, col = 3)
+```
+
+
+
+# Q6
+
+```{r}
+ttrain <- read.csv("data/ttrain.csv", header=T, row.names=1)
+ttest <- read.csv("data/ttest.csv", header=T, row.names=1)
+head(ttrain)
+```
+
+# a)
+```{r fig.width=3, fig.height=3}
+library(tree)
+tree <- tree(Survived ~ ., data=ttrain)
+summary(tree)
+plot(tree)
+text(tree, cex=.5, pretty=0)
+```
+
+Fitted model: males have no chance of survival. For females, those in 3rd class have no chance of survival. The rest are predicted as survived. Age is not in the model.
+
+
+```{r}
+prob <- predict(tree, ttrain)[,2]
+pred <- factor(ifelse(prob < .5, "No", "Yes"))
+tab <- table(pred, ttrain$Survived)
+tab
+tab[1,2]/sum(tab[,2])
+tab[2,1]/sum(tab[,1])
+tab[2,2]/sum(tab[2,])
+mean(pred != ttrain$Survived)
+
+
+
+```
+
+
+For the training set:
+
+`r 100*tab[1,2]/sum(tab[,2])`\% of survivors are mis classified.
+
+Of those who died `r 100*tab[2,1]/sum(tab[,1])`\% are mis classified. 
+
+ `r 100*tab[2,2]/sum(tab[2,])`\% of predicted survivors actually survived.
+ 
+ Overall error rate is  `r mean(pred != ttrain$Survived)`.
+ 
+```{r}
+prob <- predict(tree, ttest)[,2]
+pred <- factor(ifelse(prob < .5, "No", "Yes"))
+tab <- table(pred, ttest$Survived)
+tab
+tab[1,2]/sum(tab[,2])
+tab[2,1]/sum(tab[,1])
+tab[2,2]/sum(tab[2,])
+mean(pred != ttest$Survived)
+```
+ 
+ 
+ For the test set:
+ 
+ 
+`r 100*tab[1,2]/sum(tab[,2])`\% of survivors are mis classified.
+
+Of those who died `r 100*tab[2,1]/sum(tab[,1])`\% are mis classified. 
+
+ `r 100*tab[2,2]/sum(tab[2,])`\% of predicted survivors actually survived.
+ 
+ Overall error rate is  `r mean(pred != ttest$Survived)`.
+
+
+Using Rpart:
+
+```{r fig.width=3, fig.height=3}
+library(rpart)
+rp <- rpart(Survived ~ ., data=ttrain)
+
+library(rpart.plot)
+rpart.plot(rp)
+```
+
+
+# b)
+
+```{r fig.width=3, fig.height=3}
+cvtree <- cv.tree(tree)
+cvtree
+plot(cvtree$size,cvtree$dev,type="b")
+w <- which.min(cvtree$dev)
+cvtree$size[w]
+# no pruning required
+```
+
+# c)
+
+
+```{r}
+tree <- tree(Survived ~ Age + Class, data=ttrain)
+summary(tree)
+plot(tree)
+text(tree, cex=.5, pretty=0)
+prob <- predict(tree, ttrain)[,2]
+pred <- factor(ifelse(prob < .5, "No", "Yes"))
+unique(cbind(ttrain[, 1:3], pred))
+```
+
+
+Fitted model: 3rd class and crew have no chance of survival. For those in 1st and 2nd class children are predicted to have survived. Adults in 1st class are predicted to have survived, but those in the 2nd did not.
+
+
+ 
+```{r}
+prob <- predict(tree, ttest)[,2]
+pred <- factor(ifelse(prob < .5, "No", "Yes"))
+tab <- table(pred, ttest$Survived)
+tab
+tab[1,2]/sum(tab[,2])
+tab[2,1]/sum(tab[,1])
+tab[2,2]/sum(tab[2,])
+mean(pred != ttest$Survived)
+```
+ 
+ 
+ For the test set:
+ 
+ 
+`r 100*tab[1,2]/sum(tab[,2])`\% of survivors are mis classified.
+
+Of those who died `r 100*tab[2,1]/sum(tab[,1])`\% are mis classified. 
+
+ `r 100*tab[2,2]/sum(tab[2,])`\% of predicted survivors actually survived.
+ 
+ Overall error rate is  `r mean(pred != ttest$Survived)`.
+
+Using Rpart:
+
+```{r fig.width=3, fig.height=3}
+
+rp <- rpart(Survived ~ Age + Class, data=ttrain)
+
+rpart.plot(rp)
+```
+# d)
+```{r fig.width=3, fig.height=3}
+suppressMessages(library(randomForest))
+bag <- randomForest(Survived ~ ., data=ttrain)
+varImpPlot(bag)
+
+pred <- predict(bag, newdata=ttest)
+tab <- table(pred, ttest$Survived)
+tab
+tab[1,2]/sum(tab[,2])
+tab[2,1]/sum(tab[,1])
+tab[2,2]/sum(tab[2,])
+mean(pred != ttest$Survived)
+
+```
+
+For the test set:
+ 
+ 
+`r 100*tab[1,2]/sum(tab[,2])`\% of survivors are mis classified.
+
+Of those who died `r 100*tab[2,1]/sum(tab[,1])`\% are mis classified. 
+
+ `r 100*tab[2,2]/sum(tab[2,])`\% of predicted survivors actually survived.
+ 
+ Overall error rate is  `r mean(pred != ttest$Survived)`.
+ 
+ Order of variable importance is sex, class and age.
+
+
+# Q7
+
+Any sensible answer for the tuning part is ok.
+```{r}
+heart <- read.csv("data/heart.csv", row.names=1)
+head(heart)
+heart <- na.omit(heart)
+set.seed(2)
+s <- sample(nrow(heart), 200)
+heartTrain <- heart[s,]
+heartTest <- heart[-s,]
+
+```
+
+```{r}
+
+library(e1071)
+fit.svm <- svm(AHD~., data = heartTrain, kernel = "radial")
+summary(fit.svm)
+
+
+pred <- predict(fit.svm, newdata = heartTest)
+
+table(pred,  heartTest$AHD)
+mean(pred != heartTest$AHD) 
+```
+
+```{r}
+tune.out <- tune(svm,AHD~., data = heartTrain, kernel = "radial", ranges = list(cost = 10^seq(-1, 6, by = 1), gamma = 10^seq(-6, 1, by = 1)) )
+tune.out
+fit.svm <- svm(AHD~., data = heartTrain, kernel = "radial", cost = 10000, gamma = 0.00001)
+summary(fit.svm)
+
+
+pred <- predict(fit.svm, newdata = heartTest)
+
+table(pred,  heartTest$AHD)
+mean(pred != heartTest$AHD) 
+
+
+bag <- randomForest(AHD ~ ., data=heartTrain)
+pred <- predict(bag, heartTest)
+mean(pred != heartTest$AHD, na.rm=T) # test error
+
+```
+
+<!-- ```{r eval = FALSE} -->
+
+
+<!-- library(condvis) -->
+<!-- ceplot(data = heartTrain, model = list(svm = fit.svm, rf = bag), sectionvars = c("Chol"),  threshold = 2,  type = "shiny") -->
+<!-- ``` -->
+
+
+
